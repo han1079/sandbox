@@ -21,7 +21,11 @@ BUILD_DIR = build
 # The path is largely dependent on HOW you installed the Arduino IDE. VERY annoying.
 # Sometimes it's in /usr/bin/avr-g++, sometimes it's in /usr/local/bin/avr-g++, sometimes it's in your home directory.
 # This is the path that I found because I used an AppImage to install the Arduino IDE.
-THIS_RUNS_THE_COMPILER = ${HOME}/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-g++
+THIS_RUNS_THE_CPP_COMPILER = ${HOME}/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-g++
+THIS_RUNS_THE_C_COMPILER = ${HOME}/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-gcc
+THIS_RUNS_THE_HEX_GENERATOR = ${HOME}/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-objcopy
+THIS_RUNS_THE_FLASHER = ${HOME}/.arduino15/packages/arduino/tools/avrdude/6.3.0-arduino17/bin/avrdude
+TELL_THE_FLASHER_WHERE_ITS_CONFIG_FILE_IS = -C ${HOME}/.arduino15/packages/arduino/tools/avrdude/6.3.0-arduino17/etc/avrdude.conf
 
 # ------------------ARDUINO LIBRARY LOCATIONS------------------#
 # These are the locations of the Arduino libraries that will be used to compile the project.
@@ -34,7 +38,9 @@ THIS_RUNS_THE_COMPILER = ${HOME}/.arduino15/packages/arduino/tools/avr-gcc/7.3.0
 # Look for a "variants" directory. Most of the time, standard is the right one.
 # However, Mega, Leonardo, Micro, etc, will have different variants.
 EXTERNAL_LIBRARIES = ${HOME}/.arduino15/packages/arduino/hardware/avr/1.8.6/cores/arduino
+DEFAULT_LIBRARIES = ${HOME}/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/avr/include
 PIN_ALIASES = ${HOME}/.arduino15/packages/arduino/hardware/avr/1.8.6/variants/standard
+EIGHTPIN = ${HOME}/.arduino15/packages/arduino/hardware/avr/1.8.6/variants/eightanaloginputs
 
 # ------------------CRITICAL VARIABLES------------------#
 # AVR-GCC Compilers will be VERY angry if you don't specify the microcontroller and clock frequency.
@@ -48,7 +54,7 @@ F_CPU = 16000000L
 # The -I flag tells the compiler where to look for header files.
 # By packing it all into a single variable, you can use the same flags for all the compilation commands
 # This works because we are using a strict superset of all the flags that the compiler needs for each command.
-DASH_I_STUFF = -I${EXTERNAL_LIBRARIES} -I${PIN_ALIASES} -mmcu=${mmcu} -DF_CPU=${F_CPU} -std=gnu++11 -fpermissive -Os
+DASH_I_STUFF = -I${EXTERNAL_LIBRARIES} -I${DEFAULT_LIBRARIES} -I${PIN_ALIASES} -I${EIGHTPIN} -mmcu=${mmcu} -DF_CPU=${F_CPU} -Os -ffunction-sections -fdata-sections
 
 # ------------------ARDUINO C AND CPP FILES------------------#
 # These are the locations of the Arduino C and C++ files that will be compiled.
@@ -60,9 +66,12 @@ DASH_I_STUFF = -I${EXTERNAL_LIBRARIES} -I${PIN_ALIASES} -mmcu=${mmcu} -DF_CPU=${
 # The result is a list of all the .c and .cpp files in the specified directory.
 # Remember. These are just PATHS to FILES. They're used so the compiler knows where to find the files.
 DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE := ${HOME}/.arduino15/packages/arduino/hardware/avr/1.8.6/cores/arduino
-ALL_THE_ARDUINO_C_FILE_LOCATIONS := $(wildcard ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/*.c)
-ALL_THE_ARDUINO_CPP_FILE_LOCATIONS := $(wildcard ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/*.cpp)
-ALL_THE_ARDUINO_S_FILE_LOCATIONS := $(wildcard ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/*.S)
+
+EXCLUSION_LIST := 0
+ALL_THE_ARDUINO_C_FILE_LOCATIONS := $(filter-out ${EXCLUSION_LIST}, $(wildcard ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/*.c))
+ALL_THE_ARDUINO_CPP_FILE_LOCATIONS := $(filter-out ${EXCLUSION_LIST}, $(wildcard ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/*.cpp))
+ALL_THE_ARDUINO_S_FILE_LOCATIONS := $(filter-out ${EXCLUSION_LIST}, $(wildcard ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/*.S))
+
 
 # ------------------ARDUINO C AND CPP FILES NAMES------------------#
 # These are JUST the names of the files. 
@@ -79,24 +88,24 @@ ALL_THE_ARDUINO_S_FILE_NAMES := $(notdir ${ALL_THE_ARDUINO_S_FILE_LOCATIONS})
 # This is done using the variable substitution feature of Makefiles.
 # The .c=.o and .cpp=.o means that it will replace the .c and .cpp extensions with .o.
 # This is a common pattern in Makefiles to generate object files from source files.
-ALL_THE_ARDUINO_C_O_FILES_NAMES := ${ALL_THE_ARDUINO_C_FILE_NAMES:.c=.o}
-ALL_THE_ARDUINO_CPP_O_FILES_NAMES := ${ALL_THE_ARDUINO_CPP_FILE_NAMES:.cpp=.o}
-ALL_THE_ARDUINO_S_O_FILE_NAMES := $(ALL_THE_ARDUINO_S_FILE_NAMES:.s=.o)
+_ALL_THE_ARDUINO_C_O_FILES_NAMES := ${ALL_THE_ARDUINO_C_FILE_NAMES:.c=.c.o}
+_ALL_THE_ARDUINO_CPP_O_FILES_NAMES := ${ALL_THE_ARDUINO_CPP_FILE_NAMES:.cpp=.cpp.o}
+_ALL_THE_ARDUINO_S_O_FILE_NAMES := $(ALL_THE_ARDUINO_S_FILE_NAMES:.S=.S.o)
 
 # Since these files are in the build directory, we need to prepend the build directory to the names.
 # patsubst looks for a thing following the pattern in %, and replaces it with ${BUILD_DIR}/%
 # Since % is fully generic, it will match any file name. Effectively, it will prepend the build directory to the file names.
-ALL_THE_ARDUINO_C_O_FILES_NAMES := ${patsubst %,${BUILD_DIR}/%,$(ALL_THE_ARDUINO_C_O_FILES_NAMES)}
-ALL_THE_ARDUINO_CPP_O_FILES_NAMES := ${patsubst %,${BUILD_DIR}/%,$(ALL_THE_ARDUINO_CPP_O_FILES_NAMES)}
-ALL_THE_ARDUINO_S_O_FILES_NAMES := ${patsubst %,${BUILD_DIR}/%,$(ALL_THE_ARDUINO_S_O_FILE_NAMES)}
+ALL_THE_ARDUINO_C_O_FILES_NAMES   := ${patsubst %,${BUILD_DIR}/%,$(_ALL_THE_ARDUINO_C_O_FILES_NAMES)}
+ALL_THE_ARDUINO_CPP_O_FILES_NAMES := ${patsubst %,${BUILD_DIR}/%,$(_ALL_THE_ARDUINO_CPP_O_FILES_NAMES)}
+ALL_THE_ARDUINO_S_O_FILES_NAMES   := ${patsubst %,${BUILD_DIR}/%,$(_ALL_THE_ARDUINO_S_O_FILES_NAMES)}
 
 # ------------------DEFAULT TARGET------------------#
 # This is the default target that gets run when you just type "make" in the terminal.
 # It's usually named "all" or "default", but you can name it anything you want.
 # I named it banana to show that you don't need to name it "all" or "default" or anything like that.
-# It will create the main.elf file, which is the final output of the compilation process.
-# What this basically does is that is says "banana runs the main.elf compilation rule", which is defined below.
-banana: ${BUILD_DIR}/main.elf
+# It will create the loop.elf file, which is the final output of the compilation process.
+# What this basically does is that is says "banana runs the loop.elf compilation rule", which is defined below.
+banana: ${BUILD_DIR}/loop.hex
 
 # ------------------BUILD DIRECTORY CREATION------------------#
 # This is a rule that creates the build directory if it doesn't exist.
@@ -123,51 +132,69 @@ ${BUILD_DIR}:
 # 6. The -c flag wants to compile using the "<$" file, which is the first dependency after the colon.
 # 7. Output the compiled object file to the target, which is the $@, or the thing before the colon.
 
-${BUILD_DIR}/%.o: %.c | ${BUILD_DIR}
-	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@ 
+# ${BUILD_DIR}/%.o: %.c | ${BUILD_DIR}
+# 	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@ 
 
-${BUILD_DIR}/%.o: %.cpp | ${BUILD_DIR}
-	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@
+# ${BUILD_DIR}/%.o: %.cpp | ${BUILD_DIR}
+# 	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@
 
-${BUILD_DIR}/%.o: %.S | ${BUILD_DIR}
-	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@
+# ${BUILD_DIR}/%.o: %.S | ${BUILD_DIR}
+# 	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@
 
-# ------------------MAIN FILE COMPILATION------------------#
-# This explicitly generates the main.o file from main.cpp. 
+# ------------------loop FILE COMPILATION------------------#
+# This explicitly generates the loop.o file from loop.cpp. 
 # Theoretically, this is done with the generic %.o: %.cpp rule
 # But this is here to show how you can explicitly define a rule for a specific file.
 
-# ${BUILD_DIR}/main.o: main.cpp | ${BUILD_DIR}
-# 	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c main.cpp -o ${BUILD_DIR}/main.o
+${BUILD_DIR}/loop.o:
+	${THIS_RUNS_THE_C_COMPILER} ${DASH_I_STUFF} -c loop.c -o ${BUILD_DIR}/loop.o
 
 # ------------------ARDUINO C AND CPP FILE COMPILATION------------------#
 # This compiles all the Arduino C and C++ files into object files.
 # It uses something similar to the generic %.o: %.c rule, but since
 # the files are in the Arduino directories, we need to specify the full path to the files.
-${BUILD_DIR}/%.o: ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/%.c | ${BUILD_DIR}
-	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@ 
+${BUILD_DIR}/%.c.o: ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/%.c | ${BUILD_DIR}
+	${THIS_RUNS_THE_C_COMPILER} ${DASH_I_STUFF} -c $< -o $@ 
 
-${BUILD_DIR}/%.o: ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/%.cpp | ${BUILD_DIR}
-	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@
+${BUILD_DIR}/%.cpp.o: ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/%.cpp | ${BUILD_DIR}
+	${THIS_RUNS_THE_CPP_COMPILER} ${DASH_I_STUFF} -c $< -o $@
 
-${BUILD_DIR}/%.o: ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/%.S | ${BUILD_DIR}
-	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@
+${BUILD_DIR}/%.S.o: ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/%.S | ${BUILD_DIR}
+	${THIS_RUNS_THE_C_COMPILER} ${DASH_I_STUFF} -c $< -o $@
 
 # ------------------LINKING------------------#
 # This links all the .o files together to create the elf file.
-# Dependencies are a macro that includes a giant list of .o files, as well as the main file.
+# Dependencies are a macro that includes a giant list of .o files, as well as the loop file.
 # The $^ means "all the dependencies" after the colon, and the $@ means "the target", or the thing before the colon.
 
 # NOTE. $^ is DIFFERENT from $<. 
 # The linker needs ALL the .o files, to know what to link together!
-${BUILD_DIR}/main.elf: ${BUILD_DIR}/main.o ${ALL_THE_ARDUINO_C_O_FILES_NAMES} ${ALL_THE_ARDUINO_CPP_O_FILES_NAMES} ${ALL_THE_ARDUINO_S_O_FILES_NAMES} | ${BUILD_DIR}
-	${THIS_RUNS_THE_COMPILER} $^ -o $@
+# ${BUILD_DIR}/loop.elf: ${BUILD_DIR}/loop.o ${ALL_THE_ARDUINO_C_O_FILES_NAMES} ${ALL_THE_ARDUINO_CPP_O_FILES_NAMES} ${ALL_THE_ARDUINO_S_O_FILES_NAMES} | ${BUILD_DIR}
+# 	${THIS_RUNS_THE_COMPILER} $^ -Os --data-sections -o $@
+
+compile_all_libraries: ${ALL_THE_ARDUINO_C_O_FILES_NAMES} ${ALL_THE_ARDUINO_CPP_O_FILES_NAMES} ${ALL_THE_ARDUINO_S_O_FILES_NAMES}
+
+# Arduino Nanos are fucking tiny. I'm cheating and stealing the precompiled core library.
+${BUILD_DIR}/loop.elf: ${BUILD_DIR}/loop.o corea.a | ${BUILD_DIR}
+	${THIS_RUNS_THE_CPP_COMPILER} -Wall -Wextra -Os -g -fuse-linker-plugin -Wl,--gc-sections -mmcu=atmega328p -o $@ $^
+
+#---------------------HEX FILE GENERATION------------------#
+${BUILD_DIR}/loop.hex: ${BUILD_DIR}/loop.elf
+	${THIS_RUNS_THE_HEX_GENERATOR} -O ihex -R .eeprom $< $@
+
+
+# ------------------FLASHING------------------#
+# This is the rule that flashes the compiled program to the Arduino board.
+flash: ${BUILD_DIR}/loop.hex
+	${THIS_RUNS_THE_FLASHER} \
+	${TELL_THE_FLASHER_WHERE_ITS_CONFIG_FILE_IS} \
+	-v -p m328p -c arduino -P /dev/ttyUSB0 -b 115200 -U flash:w:$<
 
 
 # ------------------CLEANING------------------#
-# This is a clean target that removes all the .o files and the main.elf file.
+# This is a clean target that removes all the .o files and the loop.elf file.
 clean:
-	rm -rf ${BUILD_DIR}/*
+	rm -rf ${BUILD_DIR}/* ${PWD}/corea.a
 
 # ------------------PHONY TARGETS------------------#
 # These are phony targets that are not actual files, but just commands to run.
