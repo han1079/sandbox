@@ -1,0 +1,7 @@
+{
+    "label": "Print Env",
+    "type": "shell",
+    "command": "env",
+    "problemMatcher": [],
+    "group": "build"
+}
