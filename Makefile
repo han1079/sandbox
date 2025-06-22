@@ -23,6 +23,7 @@ BUILD_DIR = build
 # This is the path that I found because I used an AppImage to install the Arduino IDE.
 THIS_RUNS_THE_CPP_COMPILER = ${HOME}/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-g++
 THIS_RUNS_THE_C_COMPILER = ${HOME}/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-gcc
+THIS_RUNS_AVR_ARCHIVER = ${HOME}/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-ar
 THIS_RUNS_THE_HEX_GENERATOR = ${HOME}/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-objcopy
 THIS_RUNS_THE_FLASHER = ${HOME}/.arduino15/packages/arduino/tools/avrdude/6.3.0-arduino17/bin/avrdude
 TELL_THE_FLASHER_WHERE_ITS_CONFIG_FILE_IS = -C ${HOME}/.arduino15/packages/arduino/tools/avrdude/6.3.0-arduino17/etc/avrdude.conf
@@ -82,11 +83,11 @@ ALL_THE_ARDUINO_S_FILE_NAMES := $(notdir ${ALL_THE_ARDUINO_S_FILE_LOCATIONS})
 
 # ------------------ARDUINO C AND CPP OBJECT FILE NAMES------------------#
 # These are the names of the object files that will be generated from the Arduino C and C++ files.
-# Since EACH .c and .cpp file that is compiled will generate a .o file - it's only SANE to have them be the same name.
+# Since EACH .c and .cpp file that is compiled will generate a .c.o / .cpp.o file - it's only SANE to have them be the same name.
 # These variables basically take that giant list of .c and .cpp file locations and just swaps the .c and .cpp for .o.
 # Since we conveniently extracted the file names in the previous step, we can just use those names.
 # This is done using the variable substitution feature of Makefiles.
-# The .c=.o and .cpp=.o means that it will replace the .c and .cpp extensions with .o.
+# The .c=.c.o and .cpp=.cpp.o means that you essentially append a .o extension to the file names.
 # This is a common pattern in Makefiles to generate object files from source files.
 _ALL_THE_ARDUINO_C_O_FILES_NAMES := ${ALL_THE_ARDUINO_C_FILE_NAMES:.c=.c.o}
 _ALL_THE_ARDUINO_CPP_O_FILES_NAMES := ${ALL_THE_ARDUINO_CPP_FILE_NAMES:.cpp=.cpp.o}
@@ -132,27 +133,32 @@ ${BUILD_DIR}:
 # 6. The -c flag wants to compile using the "<$" file, which is the first dependency after the colon.
 # 7. Output the compiled object file to the target, which is the $@, or the thing before the colon.
 
-# ${BUILD_DIR}/%.o: %.c | ${BUILD_DIR}
-# 	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@ 
+${BUILD_DIR}/%.o: %.c | ${BUILD_DIR}
+	${THIS_RUNS_THE_C_COMPILER} ${DASH_I_STUFF} -c $< -o $@ 
 
-# ${BUILD_DIR}/%.o: %.cpp | ${BUILD_DIR}
-# 	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@
+${BUILD_DIR}/%.o: %.cpp | ${BUILD_DIR}
+	${THIS_RUNS_THE_CPP_COMPILER} ${DASH_I_STUFF} -c $< -o $@
 
-# ${BUILD_DIR}/%.o: %.S | ${BUILD_DIR}
-# 	${THIS_RUNS_THE_COMPILER} ${DASH_I_STUFF} -c $< -o $@
+${BUILD_DIR}/%.o: %.S | ${BUILD_DIR}
+	${THIS_RUNS_THE_C_COMPILER} ${DASH_I_STUFF} -c $< -o $@
 
 # ------------------loop FILE COMPILATION------------------#
 # This explicitly generates the loop.o file from loop.cpp. 
 # Theoretically, this is done with the generic %.o: %.cpp rule
 # But this is here to show how you can explicitly define a rule for a specific file.
 
-${BUILD_DIR}/loop.o:
-	${THIS_RUNS_THE_C_COMPILER} ${DASH_I_STUFF} -c loop.c -o ${BUILD_DIR}/loop.o
+# ${BUILD_DIR}/loop.o:
+# 	${THIS_RUNS_THE_C_COMPILER} ${DASH_I_STUFF} -c loop.c -o ${BUILD_DIR}/loop.o
 
 # ------------------ARDUINO C AND CPP FILE COMPILATION------------------#
 # This compiles all the Arduino C and C++ files into object files.
 # It uses something similar to the generic %.o: %.c rule, but since
 # the files are in the Arduino directories, we need to specify the full path to the files.
+
+# Also SUPER important note that the .c and .cpp files in the Arduino directories
+# have to get compiled into .c.o and .cpp.o files, respectively.
+# This is some kind of quirk in the Arduino build system, but it is what it is.
+# The .S files are assembly files, and they also get compiled into .S.o files
 ${BUILD_DIR}/%.c.o: ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/%.c | ${BUILD_DIR}
 	${THIS_RUNS_THE_C_COMPILER} ${DASH_I_STUFF} -c $< -o $@ 
 
@@ -172,10 +178,11 @@ ${BUILD_DIR}/%.S.o: ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/%.S |
 # ${BUILD_DIR}/loop.elf: ${BUILD_DIR}/loop.o ${ALL_THE_ARDUINO_C_O_FILES_NAMES} ${ALL_THE_ARDUINO_CPP_O_FILES_NAMES} ${ALL_THE_ARDUINO_S_O_FILES_NAMES} | ${BUILD_DIR}
 # 	${THIS_RUNS_THE_COMPILER} $^ -Os --data-sections -o $@
 
-compile_all_libraries: ${ALL_THE_ARDUINO_C_O_FILES_NAMES} ${ALL_THE_ARDUINO_CPP_O_FILES_NAMES} ${ALL_THE_ARDUINO_S_O_FILES_NAMES}
+${BUILD_DIR}/core.a: ${ALL_THE_ARDUINO_C_O_FILES_NAMES} ${ALL_THE_ARDUINO_CPP_O_FILES_NAMES} ${ALL_THE_ARDUINO_S_O_FILES_NAMES} | ${BUILD_DIR}
+	${THIS_RUNS_AVR_ARCHIVER} rcs $@ $^
 
 # Arduino Nanos are fucking tiny. I'm cheating and stealing the precompiled core library.
-${BUILD_DIR}/loop.elf: ${BUILD_DIR}/loop.o corea.a | ${BUILD_DIR}
+${BUILD_DIR}/loop.elf: ${BUILD_DIR}/loop.o ${BUILD_DIR}/core.a | ${BUILD_DIR}
 	${THIS_RUNS_THE_CPP_COMPILER} -Wall -Wextra -Os -g -fuse-linker-plugin -Wl,--gc-sections -mmcu=atmega328p -o $@ $^
 
 #---------------------HEX FILE GENERATION------------------#
