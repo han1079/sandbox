@@ -104,9 +104,9 @@ ALL_THE_ARDUINO_S_O_FILES_NAMES   := ${patsubst %,${BUILD_DIR}/%,$(_ALL_THE_ARDU
 # This is the default target that gets run when you just type "make" in the terminal.
 # It's usually named "all" or "default", but you can name it anything you want.
 # I named it banana to show that you don't need to name it "all" or "default" or anything like that.
-# It will create the loop.elf file, which is the final output of the compilation process.
-# What this basically does is that is says "banana runs the loop.elf compilation rule", which is defined below.
-banana: ${BUILD_DIR}/loop.hex
+# It will create the main.elf file, which is the final output of the compilation process.
+# What this basically does is that is says "banana runs the main.elf compilation rule", which is defined below.
+banana: ${BUILD_DIR}/main.hex
 
 # ------------------BUILD DIRECTORY CREATION------------------#
 # This is a rule that creates the build directory if it doesn't exist.
@@ -142,13 +142,13 @@ ${BUILD_DIR}/%.o: %.cpp | ${BUILD_DIR}
 ${BUILD_DIR}/%.o: %.S | ${BUILD_DIR}
 	${THIS_RUNS_THE_C_COMPILER} ${DASH_I_STUFF} -c $< -o $@
 
-# ------------------loop FILE COMPILATION------------------#
-# This explicitly generates the loop.o file from loop.cpp. 
+# ------------------main FILE COMPILATION------------------#
+# This explicitly generates the main.o file from main.cpp. 
 # Theoretically, this is done with the generic %.o: %.cpp rule
 # But this is here to show how you can explicitly define a rule for a specific file.
 
-# ${BUILD_DIR}/loop.o:
-# 	${THIS_RUNS_THE_C_COMPILER} ${DASH_I_STUFF} -c loop.c -o ${BUILD_DIR}/loop.o
+# ${BUILD_DIR}/main.o:
+# 	${THIS_RUNS_THE_C_COMPILER} ${DASH_I_STUFF} -c main.c -o ${BUILD_DIR}/main.o
 
 # ------------------ARDUINO C AND CPP FILE COMPILATION------------------#
 # This compiles all the Arduino C and C++ files into object files.
@@ -170,36 +170,36 @@ ${BUILD_DIR}/%.S.o: ${DIRECTORY_WHERE_ALL_THE_ARDUINO_C_AND_CPP_FILES_ARE}/%.S |
 
 # ------------------LINKING------------------#
 # This links all the .o files together to create the elf file.
-# Dependencies are a macro that includes a giant list of .o files, as well as the loop file.
+# Dependencies are a macro that includes a giant list of .o files, as well as the main file.
 # The $^ means "all the dependencies" after the colon, and the $@ means "the target", or the thing before the colon.
 
 # NOTE. $^ is DIFFERENT from $<. 
 # The linker needs ALL the .o files, to know what to link together!
-# ${BUILD_DIR}/loop.elf: ${BUILD_DIR}/loop.o ${ALL_THE_ARDUINO_C_O_FILES_NAMES} ${ALL_THE_ARDUINO_CPP_O_FILES_NAMES} ${ALL_THE_ARDUINO_S_O_FILES_NAMES} | ${BUILD_DIR}
+# ${BUILD_DIR}/main.elf: ${BUILD_DIR}/main.o ${ALL_THE_ARDUINO_C_O_FILES_NAMES} ${ALL_THE_ARDUINO_CPP_O_FILES_NAMES} ${ALL_THE_ARDUINO_S_O_FILES_NAMES} | ${BUILD_DIR}
 # 	${THIS_RUNS_THE_COMPILER} $^ -Os --data-sections -o $@
 
 ${BUILD_DIR}/core.a: ${ALL_THE_ARDUINO_C_O_FILES_NAMES} ${ALL_THE_ARDUINO_CPP_O_FILES_NAMES} ${ALL_THE_ARDUINO_S_O_FILES_NAMES} | ${BUILD_DIR}
 	${THIS_RUNS_AVR_ARCHIVER} rcs $@ $^
 
 # Arduino Nanos are fucking tiny. I'm cheating and stealing the precompiled core library.
-${BUILD_DIR}/loop.elf: ${BUILD_DIR}/loop.o ${BUILD_DIR}/core.a | ${BUILD_DIR}
+${BUILD_DIR}/main.elf: ${BUILD_DIR}/main.o ${BUILD_DIR}/core.a | ${BUILD_DIR}
 	${THIS_RUNS_THE_CPP_COMPILER} -Wall -Wextra -Os -g -fuse-linker-plugin -Wl,--gc-sections -mmcu=atmega328p -o $@ $^
 
 #---------------------HEX FILE GENERATION------------------#
-${BUILD_DIR}/loop.hex: ${BUILD_DIR}/loop.elf
+${BUILD_DIR}/main.hex: ${BUILD_DIR}/main.elf
 	${THIS_RUNS_THE_HEX_GENERATOR} -O ihex -R .eeprom $< $@
 
 
 # ------------------FLASHING------------------#
 # This is the rule that flashes the compiled program to the Arduino board.
-flash: ${BUILD_DIR}/loop.hex
+flash: ${BUILD_DIR}/main.hex
 	${THIS_RUNS_THE_FLASHER} \
 	${TELL_THE_FLASHER_WHERE_ITS_CONFIG_FILE_IS} \
 	-v -p m328p -c arduino -P /dev/ttyUSB0 -b 115200 -U flash:w:$<
 
 
 # ------------------CLEANING------------------#
-# This is a clean target that removes all the .o files and the loop.elf file.
+# This is a clean target that removes all the .o files and the main.elf file.
 clean:
 	rm -rf ${BUILD_DIR}/* ${PWD}/corea.a
 
